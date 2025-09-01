@@ -13,7 +13,11 @@ from typing import Optional, Dict, Any
 
 from flask import Flask, render_template, request, jsonify, send_file, session
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Add parent directory to path for both local and production environments
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
 
 from lottery_engine import Entry, LotteryDraw, LotteryError
 
@@ -88,33 +92,24 @@ def get_status():
 def upload_csv():
     """Handle CSV file upload."""
     try:
-        print(f"DEBUG: Upload request received. Files: {list(request.files.keys())}")
-        
         if 'file' not in request.files:
-            print("DEBUG: No 'file' key in request.files")
             return jsonify({'error': 'No file uploaded'}), 400
         
         file = request.files['file']
-        print(f"DEBUG: File object: {file}, filename: {file.filename}")
         
         if file.filename == '':
-            print("DEBUG: Empty filename")
             return jsonify({'error': 'No file selected'}), 400
         
         if not file.filename.lower().endswith('.csv'):
-            print(f"DEBUG: File extension check failed for: {file.filename}")
             return jsonify({'error': 'File must be a CSV'}), 400
         
         # Read file content
         try:
             content = file.read().decode('utf-8')
-            print(f"DEBUG: File content length: {len(content)}")
         except UnicodeDecodeError as e:
-            print(f"DEBUG: Unicode decode error: {e}")
             return jsonify({'error': 'File must be UTF-8 encoded'}), 400
         
         lines = [line.strip() for line in content.strip().split('\n') if line.strip()]
-        print(f"DEBUG: Parsed {len(lines)} lines: {lines[:3]}...")
         
         if len(lines) < 2:
             return jsonify({'error': 'CSV must have at least 2 lines (winner count + entries)'}), 400
@@ -166,9 +161,6 @@ def upload_csv():
         })
         
     except Exception as e:
-        print(f"DEBUG: Exception in upload_csv: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
         return jsonify({'error': f'Error processing file: {str(e)}'}), 500
 
 
@@ -230,11 +222,7 @@ def set_manual_entries():
 def shuffle_lottery():
     """Create and shuffle the lottery draw."""
     try:
-        print(f"DEBUG: Shuffle - entries count: {len(lottery_state['entries'])}")
-        print(f"DEBUG: Shuffle - winners_to_pick: {lottery_state['winners_to_pick']}")
-        
         if not lottery_state['entries']:
-            print("DEBUG: No entries found")
             return jsonify({'error': 'No entries loaded'}), 400
         
         data = request.get_json() or {}
@@ -273,12 +261,7 @@ def shuffle_lottery():
 def draw_winner():
     """Draw the next winner."""
     try:
-        print(f"DEBUG: Draw - has draw object: {lottery_state['draw'] is not None}")
-        print(f"DEBUG: Draw - is_shuffled: {lottery_state['is_shuffled']}")
-        print(f"DEBUG: Draw - entries count: {len(lottery_state['entries'])}")
-        
         if not lottery_state['draw'] or not lottery_state['is_shuffled']:
-            print("DEBUG: Draw failed - lottery not shuffled or no draw object")
             return jsonify({'error': 'Lottery not shuffled'}), 400
         
         if lottery_state['draw'].state().status == "Completed":
@@ -353,26 +336,36 @@ def reset_lottery():
 if __name__ == '__main__':
     import sys
     
-    # Allow custom port via command line argument
-    port = 8080  # Default port
+    # Get port from environment (for Railway/Heroku) or command line argument
+    port = int(os.environ.get('PORT', 8080))
+    
+    # Allow custom port via command line argument (for local development)
     if len(sys.argv) > 1:
         try:
             port = int(sys.argv[1])
         except ValueError:
             print("Usage: python app.py [port_number]")
-            print("Using default port 8080")
+            print(f"Using port {port}")
     
-    print("🎲 Starting Lottery GUI Web Application")
-    print(f"📍 Open your browser to: http://localhost:{port}")
-    print("🛑 Press Ctrl+C to stop the server")
-    print(f"💡 If port {port} is busy, try: python app.py 3000")
+    # Determine if we're running in production
+    is_production = os.environ.get('RAILWAY_ENVIRONMENT') or os.environ.get('RENDER') or os.environ.get('HEROKU_APP_NAME')
     
-    try:
-        app.run(debug=True, host='localhost', port=port)
-    except OSError as e:
-        if "Address already in use" in str(e):
-            print(f"\n❌ Port {port} is already in use!")
-            print("💡 Try a different port: python app.py 3000")
-            print("🍎 On macOS, disable AirPlay Receiver in System Preferences")
-        else:
-            raise
+    if is_production:
+        print("🎲 Starting Lottery GUI Web Application (Production)")
+        print(f"🌐 Running on port {port}")
+        app.run(debug=False, host='0.0.0.0', port=port)
+    else:
+        print("🎲 Starting Lottery GUI Web Application (Development)")
+        print(f"📍 Open your browser to: http://localhost:{port}")
+        print("🛑 Press Ctrl+C to stop the server")
+        print(f"💡 If port {port} is busy, try: python app.py 3000")
+        
+        try:
+            app.run(debug=True, host='localhost', port=port)
+        except OSError as e:
+            if "Address already in use" in str(e):
+                print(f"\n❌ Port {port} is already in use!")
+                print("💡 Try a different port: python app.py 3000")
+                print("🍎 On macOS, disable AirPlay Receiver in System Preferences")
+            else:
+                raise
