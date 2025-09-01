@@ -26,61 +26,50 @@ app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 
-class LotterySession:
-    """Manages lottery state for a user session."""
-    
-    def __init__(self):
-        self.entries: list[Entry] = []
-        self.winners_to_pick: int = 0
-        self.draw: Optional[LotteryDraw] = None
-        self.is_shuffled: bool = False
-        self.winners: list = []
-        self.input_source: str = ""
-        self.randomization_mode: str = "random"  # or "reproducible"
-    
-    def reset(self):
-        """Reset the session to initial state."""
-        self.__init__()
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert session state to JSON-serializable dict."""
-        return {
-            'entry_count': len(self.entries),
-            'winners_to_pick': self.winners_to_pick,
-            'is_shuffled': self.is_shuffled,
-            'winner_count': len(self.winners),
-            'winners': [
-                {
-                    'registration_no': w.registration_no,
-                    'rank': w.rank,
-                    'picked_at': w.picked_at.isoformat()
-                } for w in self.winners
-            ],
-            'input_source': self.input_source,
-            'randomization_mode': self.randomization_mode,
-            'is_completed': self.draw and self.draw.state().status == "Completed"
-        }
+# Global simple state - much simpler than sessions
+lottery_state = {
+    'entries': [],
+    'winners_to_pick': 0,
+    'draw': None,
+    'is_shuffled': False,
+    'winners': [],
+    'input_source': '',
+    'randomization_mode': 'random'
+}
+
+def reset_lottery_state():
+    """Reset the global lottery state."""
+    global lottery_state
+    lottery_state = {
+        'entries': [],
+        'winners_to_pick': 0,
+        'draw': None,
+        'is_shuffled': False,
+        'winners': [],
+        'input_source': '',
+        'randomization_mode': 'random'
+    }
 
 
-def get_session() -> LotterySession:
-    """Get or create lottery session for current user."""
-    if 'lottery_session' not in session:
-        session['lottery_session'] = LotterySession().to_dict()
-    
-    # Reconstruct LotterySession object (simplified for this demo)
-    lottery_session = LotterySession()
-    session_data = session['lottery_session']
-    lottery_session.winners_to_pick = session_data.get('winners_to_pick', 0)
-    lottery_session.is_shuffled = session_data.get('is_shuffled', False)
-    lottery_session.input_source = session_data.get('input_source', "")
-    lottery_session.randomization_mode = session_data.get('randomization_mode', "random")
-    
-    return lottery_session
-
-
-def save_session(lottery_session: LotterySession):
-    """Save lottery session state."""
-    session['lottery_session'] = lottery_session.to_dict()
+def get_lottery_state():
+    """Get current lottery state as a simple dict."""
+    return {
+        'entry_count': len(lottery_state['entries']),
+        'winners_to_pick': lottery_state['winners_to_pick'],
+        'is_shuffled': lottery_state['is_shuffled'],
+        'winner_count': len(lottery_state['winners']),
+        'winners': [
+            {
+                'registration_no': w.registration_no,
+                'rank': w.rank,
+                'picked_at': w.picked_at.isoformat()
+            } for w in lottery_state['winners']
+        ],
+        'input_source': lottery_state['input_source'],
+        'randomization_mode': lottery_state['randomization_mode'],
+        'is_completed': lottery_state['draw'] and lottery_state['draw'].state().status == "Completed",
+        'entries_list': [entry.registration_no for entry in lottery_state['entries']] if lottery_state['entries'] else None
+    }
 
 
 @app.route('/')
@@ -91,28 +80,41 @@ def index():
 
 @app.route('/api/status')
 def get_status():
-    """Get current lottery session status."""
-    lottery_session = get_session()
-    return jsonify(lottery_session.to_dict())
+    """Get current lottery status."""
+    return jsonify(get_lottery_state())
 
 
 @app.route('/api/upload', methods=['POST'])
 def upload_csv():
     """Handle CSV file upload."""
     try:
+        print(f"DEBUG: Upload request received. Files: {list(request.files.keys())}")
+        
         if 'file' not in request.files:
+            print("DEBUG: No 'file' key in request.files")
             return jsonify({'error': 'No file uploaded'}), 400
         
         file = request.files['file']
+        print(f"DEBUG: File object: {file}, filename: {file.filename}")
+        
         if file.filename == '':
+            print("DEBUG: Empty filename")
             return jsonify({'error': 'No file selected'}), 400
         
         if not file.filename.lower().endswith('.csv'):
+            print(f"DEBUG: File extension check failed for: {file.filename}")
             return jsonify({'error': 'File must be a CSV'}), 400
         
         # Read file content
-        content = file.read().decode('utf-8')
+        try:
+            content = file.read().decode('utf-8')
+            print(f"DEBUG: File content length: {len(content)}")
+        except UnicodeDecodeError as e:
+            print(f"DEBUG: Unicode decode error: {e}")
+            return jsonify({'error': 'File must be UTF-8 encoded'}), 400
+        
         lines = [line.strip() for line in content.strip().split('\n') if line.strip()]
+        print(f"DEBUG: Parsed {len(lines)} lines: {lines[:3]}...")
         
         if len(lines) < 2:
             return jsonify({'error': 'CSV must have at least 2 lines (winner count + entries)'}), 400
@@ -146,23 +148,27 @@ def upload_csv():
         # Create entries
         entries = [Entry(reg_no) for reg_no in reg_numbers]
         
-        # Update session
-        lottery_session = get_session()
-        lottery_session.reset()
-        lottery_session.entries = entries
-        lottery_session.winners_to_pick = winners_to_pick
-        lottery_session.input_source = f"CSV file: {file.filename}"
-        save_session(lottery_session)
+        # Update global state - much simpler!
+        lottery_state['entries'] = entries
+        lottery_state['winners_to_pick'] = winners_to_pick
+        lottery_state['input_source'] = f"CSV file: {file.filename}"
+        lottery_state['is_shuffled'] = False
+        lottery_state['draw'] = None
+        lottery_state['winners'] = []
         
         return jsonify({
             'success': True,
             'entry_count': len(entries),
             'winners_to_pick': winners_to_pick,
             'sample_entries': [e.registration_no for e in entries[:5]],
-            'source': lottery_session.input_source
+            'entries_list': [e.registration_no for e in entries],
+            'source': lottery_state['input_source']
         })
         
     except Exception as e:
+        print(f"DEBUG: Exception in upload_csv: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': f'Error processing file: {str(e)}'}), 500
 
 
@@ -199,20 +205,21 @@ def set_manual_entries():
         # Create entries
         entries = [Entry(reg_no) for reg_no in reg_numbers]
         
-        # Update session
-        lottery_session = get_session()
-        lottery_session.reset()
-        lottery_session.entries = entries
-        lottery_session.winners_to_pick = winners_to_pick
-        lottery_session.input_source = "Manual input"
-        save_session(lottery_session)
+        # Update global state
+        lottery_state['entries'] = entries
+        lottery_state['winners_to_pick'] = winners_to_pick
+        lottery_state['input_source'] = "Manual input"
+        lottery_state['is_shuffled'] = False
+        lottery_state['draw'] = None
+        lottery_state['winners'] = []
         
         return jsonify({
             'success': True,
             'entry_count': len(entries),
             'winners_to_pick': winners_to_pick,
             'sample_entries': [e.registration_no for e in entries[:5]],
-            'source': lottery_session.input_source
+            'entries_list': [e.registration_no for e in entries],
+            'source': lottery_state['input_source']
         })
         
     except Exception as e:
@@ -223,9 +230,11 @@ def set_manual_entries():
 def shuffle_lottery():
     """Create and shuffle the lottery draw."""
     try:
-        lottery_session = get_session()
+        print(f"DEBUG: Shuffle - entries count: {len(lottery_state['entries'])}")
+        print(f"DEBUG: Shuffle - winners_to_pick: {lottery_state['winners_to_pick']}")
         
-        if not lottery_session.entries:
+        if not lottery_state['entries']:
+            print("DEBUG: No entries found")
             return jsonify({'error': 'No entries loaded'}), 400
         
         data = request.get_json() or {}
@@ -235,19 +244,17 @@ def shuffle_lottery():
         seed = None if randomization_mode == 'random' else 'reproducible-draw'
         
         # Create lottery draw
-        lottery_session.draw = LotteryDraw(
-            entries=lottery_session.entries,
-            winners_to_pick=lottery_session.winners_to_pick,
+        lottery_state['draw'] = LotteryDraw(
+            entries=lottery_state['entries'],
+            winners_to_pick=lottery_state['winners_to_pick'],
             seed=seed
         )
         
         # Shuffle
-        lottery_session.draw.shuffle()
-        lottery_session.is_shuffled = True
-        lottery_session.randomization_mode = randomization_mode
-        lottery_session.winners = []
-        
-        save_session(lottery_session)
+        lottery_state['draw'].shuffle()
+        lottery_state['is_shuffled'] = True
+        lottery_state['randomization_mode'] = randomization_mode
+        lottery_state['winners'] = []
         
         return jsonify({
             'success': True,
@@ -266,20 +273,22 @@ def shuffle_lottery():
 def draw_winner():
     """Draw the next winner."""
     try:
-        lottery_session = get_session()
+        print(f"DEBUG: Draw - has draw object: {lottery_state['draw'] is not None}")
+        print(f"DEBUG: Draw - is_shuffled: {lottery_state['is_shuffled']}")
+        print(f"DEBUG: Draw - entries count: {len(lottery_state['entries'])}")
         
-        if not lottery_session.draw or not lottery_session.is_shuffled:
+        if not lottery_state['draw'] or not lottery_state['is_shuffled']:
+            print("DEBUG: Draw failed - lottery not shuffled or no draw object")
             return jsonify({'error': 'Lottery not shuffled'}), 400
         
-        if lottery_session.draw.state().status == "Completed":
+        if lottery_state['draw'].state().status == "Completed":
             return jsonify({'error': 'All winners already drawn'}), 400
         
         # Pick next winner
-        winner = lottery_session.draw.pick_next()
-        lottery_session.winners.append(winner)
+        winner = lottery_state['draw'].pick_next()
+        lottery_state['winners'].append(winner)
         
-        state = lottery_session.draw.state()
-        save_session(lottery_session)
+        state = lottery_state['draw'].state()
         
         return jsonify({
             'success': True,
@@ -290,7 +299,7 @@ def draw_winner():
             },
             'is_completed': state.status == "Completed",
             'remaining_count': len(state.remaining),
-            'total_drawn': len(lottery_session.winners)
+            'total_drawn': len(lottery_state['winners'])
         })
         
     except LotteryError as e:
@@ -303,13 +312,11 @@ def draw_winner():
 def export_results():
     """Export lottery results as CSV."""
     try:
-        lottery_session = get_session()
-        
-        if not lottery_session.draw:
+        if not lottery_state['draw']:
             return jsonify({'error': 'No lottery to export'}), 400
         
         # Generate CSV export
-        csv_content = lottery_session.draw.export_csv()
+        csv_content = lottery_state['draw'].export_csv()
         
         # Create temporary file
         temp_file = tempfile.NamedTemporaryFile(
@@ -338,17 +345,34 @@ def export_results():
 
 @app.route('/api/reset', methods=['POST'])
 def reset_lottery():
-    """Reset the lottery session."""
-    lottery_session = get_session()
-    lottery_session.reset()
-    save_session(lottery_session)
-    
+    """Reset the lottery state."""
+    reset_lottery_state()
     return jsonify({'success': True, 'message': 'Lottery reset'})
 
 
 if __name__ == '__main__':
-    print("🎲 Starting Lottery GUI Web Application")
-    print("📍 Open your browser to: http://localhost:5000")
-    print("🛑 Press Ctrl+C to stop the server")
+    import sys
     
-    app.run(debug=True, host='localhost', port=5000)
+    # Allow custom port via command line argument
+    port = 8080  # Default port
+    if len(sys.argv) > 1:
+        try:
+            port = int(sys.argv[1])
+        except ValueError:
+            print("Usage: python app.py [port_number]")
+            print("Using default port 8080")
+    
+    print("🎲 Starting Lottery GUI Web Application")
+    print(f"📍 Open your browser to: http://localhost:{port}")
+    print("🛑 Press Ctrl+C to stop the server")
+    print(f"💡 If port {port} is busy, try: python app.py 3000")
+    
+    try:
+        app.run(debug=True, host='localhost', port=port)
+    except OSError as e:
+        if "Address already in use" in str(e):
+            print(f"\n❌ Port {port} is already in use!")
+            print("💡 Try a different port: python app.py 3000")
+            print("🍎 On macOS, disable AirPlay Receiver in System Preferences")
+        else:
+            raise

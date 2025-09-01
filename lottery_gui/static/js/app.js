@@ -45,6 +45,10 @@ class LotteryApp {
         this.drawProgress = document.getElementById('draw-progress');
         this.drawWinnerBtn = document.getElementById('draw-winner-btn');
         this.currentWinner = document.getElementById('current-winner');
+        this.resetDrawBtn = document.getElementById('reset-draw-btn');
+        this.drawWinnersSection = document.getElementById('draw-winners-section');
+        this.winnersSummary = document.getElementById('winners-summary');
+        this.drawWinnersList = document.getElementById('draw-winners-list');
         
         // Results elements
         this.resultsStats = document.getElementById('results-stats');
@@ -64,14 +68,22 @@ class LotteryApp {
         });
         
         // File upload
-        this.fileSelectBtn.addEventListener('click', () => this.fileInput.click());
+        this.fileSelectBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent event bubbling
+            this.fileInput.click();
+        });
         this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
         
         // Drag and drop
         this.uploadArea.addEventListener('dragover', (e) => this.handleDragOver(e));
         this.uploadArea.addEventListener('dragleave', (e) => this.handleDragLeave(e));
         this.uploadArea.addEventListener('drop', (e) => this.handleFileDrop(e));
-        this.uploadArea.addEventListener('click', () => this.fileInput.click());
+        this.uploadArea.addEventListener('click', (e) => {
+            // Only trigger file input if not clicking the button
+            if (!e.target.closest('#file-select-btn')) {
+                this.fileInput.click();
+            }
+        });
         
         // Manual entry
         this.manualSubmitBtn.addEventListener('click', () => this.submitManualEntries());
@@ -82,6 +94,7 @@ class LotteryApp {
         
         // Drawing
         this.drawWinnerBtn.addEventListener('click', () => this.drawNextWinner());
+        this.resetDrawBtn.addEventListener('click', () => this.resetLottery());
         
         // Results
         this.exportBtn.addEventListener('click', () => this.exportResults());
@@ -91,12 +104,12 @@ class LotteryApp {
     async loadInitialState() {
         try {
             const response = await this.apiCall('/api/status');
-            if (response.entry_count > 0) {
-                this.lotteryData = response;
-                this.updateUI();
-            }
+            this.lotteryData = response;
+            this.updateUI();
         } catch (error) {
             console.log('No existing lottery state');
+            // Ensure we show the input section
+            this.showSection('input');
         }
     }
     
@@ -162,8 +175,13 @@ class LotteryApp {
             this.showNotification('success', 'Success', `Loaded ${response.entry_count} entries`);
             this.updateUI();
             
+            // Clear the file input to prevent issues with re-uploading the same file
+            this.fileInput.value = '';
+            
         } catch (error) {
             this.showNotification('error', 'Upload Error', error.message);
+            // Clear file input on error too
+            this.fileInput.value = '';
         } finally {
             this.hideLoading();
         }
@@ -244,7 +262,7 @@ class LotteryApp {
             this.lotteryData.is_completed = response.is_completed;
             
             this.showWinner(winner);
-            this.addWinnerToList(winner);
+            this.addWinnerToDrawTable(winner);
             
             if (response.is_completed) {
                 this.showNotification('success', 'Draw Complete', 'All winners have been drawn!');
@@ -275,6 +293,9 @@ class LotteryApp {
                 this.winnersCountInput.value = '';
                 this.entriesTextarea.value = '';
                 this.fileInput.value = '';
+                
+                // Hide winners section
+                this.drawWinnersSection.classList.add('hidden');
                 
                 this.updateUI();
                 this.showNotification('success', 'Reset Complete', 'Lottery has been reset');
@@ -326,7 +347,7 @@ class LotteryApp {
     
     // UI Updates
     updateUI() {
-        if (!this.lotteryData) {
+        if (!this.lotteryData || this.lotteryData.entry_count === 0) {
             this.showSection('input');
             return;
         }
@@ -378,6 +399,44 @@ class LotteryApp {
             </div>
         `;
         this.configStats.innerHTML = stats;
+        
+        // Show entries table if we have entries
+        if (this.lotteryData.entries_list && this.lotteryData.entries_list.length > 0) {
+            this.showEntriesTable(this.lotteryData.entries_list);
+        }
+    }
+    
+    showEntriesTable(entries) {
+        const entriesPreview = document.getElementById('entries-preview');
+        
+        const tableHtml = `
+            <div class="table-summary">
+                <span><strong>All Participants</strong></span>
+                <span>${entries.length} total entries</span>
+            </div>
+            <div class="table-container">
+                <table class="entries-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Participant ID</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${entries.map((entry, index) => `
+                            <tr>
+                                <td class="entry-number">${index + 1}</td>
+                                <td>${entry}</td>
+                                <td><span style="color: var(--text-secondary); font-size: 0.875rem;">Ready</span></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        
+        entriesPreview.innerHTML = tableHtml;
     }
     
     updateDrawingDisplay() {
@@ -393,6 +452,77 @@ class LotteryApp {
         
         this.drawWinnerBtn.textContent = drawn === 0 ? 'Draw First Winner' : 'Draw Next Winner';
         this.drawWinnerBtn.disabled = false;
+        
+        // Show/hide winners section and populate if needed
+        if (this.winners.length > 0) {
+            this.drawWinnersSection.classList.remove('hidden');
+            this.updateWinnersSummary();
+            this.populateDrawWinnersTable();
+        } else {
+            this.drawWinnersSection.classList.add('hidden');
+        }
+    }
+    
+    updateWinnersSummary() {
+        const drawn = this.winners.length;
+        const total = this.lotteryData.winners_to_pick;
+        
+        this.winnersSummary.innerHTML = `
+            <strong>${drawn}</strong> of <strong>${total}</strong> winners drawn
+        `;
+    }
+    
+    populateDrawWinnersTable() {
+        if (this.winners.length === 0) {
+            this.drawWinnersList.innerHTML = '<p style="padding: var(--spacing-lg); text-align: center; color: var(--text-secondary);">No winners drawn yet</p>';
+            return;
+        }
+        
+        const tableHtml = `
+            <table class="draw-winners-table">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Winner ID</th>
+                        <th>Time Drawn</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${this.winners.map(winner => `
+                        <tr>
+                            <td class="winner-rank-cell">#${winner.rank}</td>
+                            <td class="winner-id-cell">${winner.registration_no}</td>
+                            <td class="winner-time-cell">${new Date(winner.picked_at).toLocaleTimeString()}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+        
+        this.drawWinnersList.innerHTML = tableHtml;
+    }
+    
+    addWinnerToDrawTable(winner) {
+        // Update the summary
+        this.updateWinnersSummary();
+        
+        // Show the section if it's the first winner
+        if (this.winners.length === 1) {
+            this.drawWinnersSection.classList.remove('hidden');
+        }
+        
+        // Repopulate the entire table for simplicity
+        this.populateDrawWinnersTable();
+        
+        // Add highlight animation to the new winner row
+        const tableRows = this.drawWinnersList.querySelectorAll('tbody tr');
+        const newWinnerRow = tableRows[tableRows.length - 1];
+        if (newWinnerRow) {
+            newWinnerRow.classList.add('new-winner');
+            setTimeout(() => {
+                newWinnerRow.classList.remove('new-winner');
+            }, 1000);
+        }
     }
     
     updateResultsDisplay() {
@@ -456,9 +586,15 @@ class LotteryApp {
     
     // Utility Methods
     async apiCall(url, options = {}) {
+        // Don't set Content-Type for FormData (file uploads)
+        const headers = {};
+        if (!(options.body instanceof FormData)) {
+            headers['Content-Type'] = 'application/json';
+        }
+        
         const response = await fetch(url, {
             headers: {
-                'Content-Type': 'application/json',
+                ...headers,
                 ...options.headers
             },
             ...options

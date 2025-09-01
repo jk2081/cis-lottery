@@ -90,6 +90,9 @@ EMPLOYEE-007</pre>
                     <div class="config-stats" id="config-stats">
                         <!-- Dynamic content -->
                     </div>
+                    <div class="entries-preview" id="entries-preview">
+                        <!-- Entries table will be shown here -->
+                    </div>
                 </div>
 
                 <div class="config-options">
@@ -136,10 +139,27 @@ EMPLOYEE-007</pre>
                         <span class="btn-icon">🎯</span>
                         Draw Next Winner
                     </button>
+                    <button class="btn btn-secondary" id="reset-draw-btn">
+                        <span class="btn-icon">🔄</span>
+                        Start Over
+                    </button>
                 </div>
 
                 <div class="current-winner hidden" id="current-winner">
                     <!-- Current winner display -->
+                </div>
+
+                <!-- Winners Table during drawing -->
+                <div class="draw-winners-section hidden" id="draw-winners-section">
+                    <div class="card-header">
+                        <h3 class="card-title">Winners Drawn</h3>
+                        <div class="winners-summary" id="winners-summary">
+                            <!-- Dynamic summary -->
+                        </div>
+                    </div>
+                    <div class="draw-winners-list" id="draw-winners-list">
+                        <!-- Winners table will be populated here -->
+                    </div>
                 </div>
             </section>
 
