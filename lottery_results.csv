@@ -1,0 +1,13 @@
+registration_no,status,rank,picked_at,position_in_sequence
+EMP-003,winner,1,2025-09-01T21:02:55.237113,1
+EMP-008,winner,2,2025-09-01T21:02:56.596098,2
+EMP-001,winner,3,2025-09-01T21:02:57.394647,3
+EMP-010,winner,4,2025-09-01T21:02:58.353961,4
+EMP-011,winner,5,2025-09-01T21:02:59.403012,5
+EMP-005,winner,6,2025-09-01T21:03:00.296757,6
+EMP-002,winner,7,2025-09-01T21:03:03.115765,7
+EMP-004,remaining,,,8
+EMP-006,remaining,,,9
+EMP-007,remaining,,,10
+EMP-009,remaining,,,11
+EMP-012,remaining,,,12

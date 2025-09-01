@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lottery Draw - Professional Lottery System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="app-title">
+                    <span class="title-icon">🎲</span>
+                    Lottery Draw
+                </h1>
+                <p class="app-subtitle">Professional lottery management system</p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            
+            <!-- Input Section -->
+            <section class="card input-section" id="input-section">
+                <div class="card-header">
+                    <h2 class="card-title">Setup Lottery</h2>
+                    <p class="card-description">Upload a CSV file or enter participants manually</p>
+                </div>
+
+                <!-- Tab Navigation -->
+                <div class="tab-nav">
+                    <button class="tab-btn active" data-tab="upload">CSV Upload</button>
+                    <button class="tab-btn" data-tab="manual">Manual Entry</button>
+                </div>
+
+                <!-- CSV Upload Tab -->
+                <div class="tab-content active" id="upload-tab">
+                    <div class="upload-area" id="upload-area">
+                        <div class="upload-icon">📁</div>
+                        <h3 class="upload-title">Drop your CSV file here</h3>
+                        <p class="upload-description">
+                            First line: number of winners<br>
+                            Following lines: participant IDs (one per line)
+                        </p>
+                        <button class="btn btn-secondary" id="file-select-btn">Select File</button>
+                        <input type="file" id="file-input" accept=".csv" style="display: none;">
+                    </div>
+
+                    <div class="upload-example">
+                        <details>
+                            <summary>CSV Format Example</summary>
+                            <pre class="example-code">5
+EMPLOYEE-001
+EMPLOYEE-002
+EMPLOYEE-003
+EMPLOYEE-004
+EMPLOYEE-005
+EMPLOYEE-006
+EMPLOYEE-007</pre>
+                        </details>
+                    </div>
+                </div>
+
+                <!-- Manual Entry Tab -->
+                <div class="tab-content" id="manual-tab">
+                    <div class="form-group">
+                        <label for="winners-count" class="form-label">Number of Winners</label>
+                        <input type="number" id="winners-count" class="form-input" min="1" placeholder="Enter number of winners">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="entries-text" class="form-label">Participants (one per line)</label>
+                        <textarea id="entries-text" class="form-textarea" rows="8" 
+                                  placeholder="EMPLOYEE-001&#10;EMPLOYEE-002&#10;EMPLOYEE-003&#10;..."></textarea>
+                    </div>
+
+                    <button class="btn btn-primary" id="manual-submit-btn">Load Entries</button>
+                </div>
+            </section>
+
+            <!-- Configuration Section -->
+            <section class="card config-section hidden" id="config-section">
+                <div class="card-header">
+                    <h2 class="card-title">Lottery Configuration</h2>
+                    <div class="config-stats" id="config-stats">
+                        <!-- Dynamic content -->
+                    </div>
+                </div>
+
+                <div class="config-options">
+                    <div class="form-group">
+                        <label class="form-label">Randomization Mode</label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="randomization" value="random" checked>
+                                <span class="radio-custom"></span>
+                                Random (different results each time)
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="randomization" value="reproducible">
+                                <span class="radio-custom"></span>
+                                Reproducible (same results for auditing)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="config-actions">
+                    <button class="btn btn-primary" id="shuffle-btn">
+                        <span class="btn-icon">🔀</span>
+                        Shuffle & Start Draw
+                    </button>
+                    <button class="btn btn-secondary" id="reset-btn">
+                        <span class="btn-icon">🔄</span>
+                        Reset
+                    </button>
+                </div>
+            </section>
+
+            <!-- Drawing Section -->
+            <section class="card drawing-section hidden" id="drawing-section">
+                <div class="card-header">
+                    <h2 class="card-title">Drawing Winners</h2>
+                    <div class="draw-progress" id="draw-progress">
+                        <!-- Dynamic progress -->
+                    </div>
+                </div>
+
+                <div class="draw-controls">
+                    <button class="btn btn-primary btn-large" id="draw-winner-btn">
+                        <span class="btn-icon">🎯</span>
+                        Draw Next Winner
+                    </button>
+                </div>
+
+                <div class="current-winner hidden" id="current-winner">
+                    <!-- Current winner display -->
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="card results-section hidden" id="results-section">
+                <div class="card-header">
+                    <h2 class="card-title">Winners List</h2>
+                    <div class="results-stats" id="results-stats">
+                        <!-- Results summary -->
+                    </div>
+                </div>
+
+                <div class="winners-list" id="winners-list">
+                    <!-- Dynamic winners list -->
+                </div>
+
+                <div class="results-actions">
+                    <button class="btn btn-primary" id="export-btn">
+                        <span class="btn-icon">📊</span>
+                        Export Results
+                    </button>
+                    <button class="btn btn-secondary" id="new-lottery-btn">
+                        <span class="btn-icon">➕</span>
+                        New Lottery
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay hidden" id="loading-overlay">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Processing...</div>
+        </div>
+
+        <!-- Notification Container -->
+        <div class="notification-container" id="notification-container">
+            <!-- Dynamic notifications -->
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
